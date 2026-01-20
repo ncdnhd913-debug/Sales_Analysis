@@ -22,20 +22,17 @@ if uploaded_file is not None:
         st.sidebar.markdown("---")
         st.sidebar.subheader("컬럼 설정")
         
-        # 3. 요청하신 컬럼 자동 설정 로직
-        # [품목명]이 있으면 기본값으로 선택, 없으면 첫 번째 컬럼 선택
+        # [품목명] 자동 선택
         default_path = ['품목명'] if '품목명' in df.columns else [df.columns[0]]
-        
         path_cols = st.sidebar.multiselect(
             "계층 구조를 선택하세요", 
             options=df.columns.tolist(),
             default=default_path
         )
         
-        # [장부금액]이 있으면 기본값으로 선택
+        # [장부금액] 자동 선택
         numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
         default_val_index = numeric_cols.index('장부금액') if '장부금액' in numeric_cols else 0
-        
         value_col = st.sidebar.selectbox(
             "매출액(크기) 기준 컬럼", 
             options=numeric_cols,
@@ -43,15 +40,26 @@ if uploaded_file is not None:
         )
 
         if path_cols and value_col:
-            # 4. 트리맵 생성 (값이 0보다 큰 데이터만 표시하여 에러 방지)
-            chart_data = df[df[value_col] > 0]
+            # ---------------------------------------------------------
+            # 중요: 오류 해결을 위한 데이터 전처리 (Aggregation)
+            # ---------------------------------------------------------
+            # 1. 선택된 컬럼들에서 결측치(NaN) 제거
+            clean_df = df.dropna(subset=path_cols + [value_col])
             
+            # 2. 계층 구조가 꼬이지 않도록 데이터 그룹화 (중복 품목 합치기)
+            # 이 과정이 없으면 'is not a leaf' 오류가 발생할 수 있습니다.
+            chart_data = clean_df.groupby(path_cols, as_index=False)[value_col].sum()
+            
+            # 3. 매출액이 0보다 큰 데이터만 필터링
+            chart_data = chart_data[chart_data[value_col] > 0]
+            # ---------------------------------------------------------
+
+            # 트리맵 생성
             fig = px.treemap(
                 chart_data, 
                 path=path_cols, 
                 values=value_col,
-                color_discrete_sequence=px.colors.qualitative.Pastel,
-                # 이미지와 유사한 느낌을 위해 폰트 크기 및 색상 조정 가능
+                color_discrete_sequence=px.colors.qualitative.Pastel
             )
 
             fig.update_traces(
@@ -61,7 +69,6 @@ if uploaded_file is not None:
             
             fig.update_layout(margin=dict(t=30, l=10, r=10, b=10))
 
-            # 5. 화면 출력
             st.plotly_chart(fig, use_container_width=True)
             
         else:
